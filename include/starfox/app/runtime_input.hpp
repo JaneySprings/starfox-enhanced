@@ -53,6 +53,20 @@ private:
 // or environment overrides retain priority over these application defaults.
 void configure_native_gamepad_support() noexcept;
 
+// SDL_GetGamepads only lists joysticks that carry a gamepad mapping. Generic
+// HID pads missing from SDL's database (DIY adapters, unusual USB pads) are
+// otherwise invisible to the game. Registers the built-in mappings below and
+// any gamecontrollerdb.txt beside the settings or executable, then maps every
+// joystick already attached. Call after SDL_INIT_GAMEPAD, before opening pads.
+void register_gamepad_mappings() noexcept;
+// Hot-plug path for SDL_EVENT_JOYSTICK_ADDED: an unmapped joystick with a
+// built-in mapping becomes a gamepad, and SDL raises SDL_EVENT_GAMEPAD_ADDED.
+bool register_known_joystick_mapping(SDL_JoystickID identifier) noexcept;
+// Mapping fields (gamecontrollerdb syntax without GUID and name) for a
+// built-in generic HID pad; empty when the device is not in the table.
+[[nodiscard]] std::string_view known_joystick_mapping(
+    std::uint16_t vendor, std::uint16_t product) noexcept;
+
 // Steam can substitute physical-controller metadata in SDL's public IDs.
 // Either those IDs or the underlying transport GUID can identify its stream.
 [[nodiscard]] constexpr bool steam_virtual_gamepad_ids(

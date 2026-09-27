@@ -5721,6 +5721,8 @@ int main(int argc, char** argv) {
 #endif
         startup_trace->mark("SDL ready; loading settings");
         starfox::app::set_portable_data_directory(executable_directory);
+        // Generic HID pads outside SDL's database stay invisible until mapped.
+        starfox::app::register_gamepad_mappings();
         if (std::getenv("STARFOX_TEST_FRAMES") == nullptr) {
             starfox::app::migrate_legacy_user_data();
         }
@@ -7676,6 +7678,12 @@ int main(int argc, char** argv) {
                     frame_step_repeater.reset();
                     if (volume_slider_drag_music) save_pregame_settings();
                     volume_slider_drag_music.reset();
+                } else if (event.type == SDL_EVENT_JOYSTICK_ADDED) {
+                    // A hot-plugged pad SDL cannot map on its own. A built-in
+                    // mapping makes SDL raise SDL_EVENT_GAMEPAD_ADDED for it.
+                    static_cast<void>(
+                        starfox::app::register_known_joystick_mapping(
+                            event.jdevice.which));
                 } else if (event.type == SDL_EVENT_GAMEPAD_ADDED
                            || event.type == SDL_EVENT_GAMEPAD_REMOVED) {
                     refresh_gamepads();

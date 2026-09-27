@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <string_view>
 
 namespace {
 
@@ -155,6 +156,23 @@ int main() {
         && !steam_virtual_gamepad_ids(0x045e,0x028e,0x045e,0x028e)
         && !steam_virtual_gamepad_ids(0,0,0,0),
         "physical or unknown controller was classified as Steam virtual");
+    {
+        using starfox::app::known_joystick_mapping;
+        const auto pico=known_joystick_mapping(0x2e8a,0xf00e);
+        require(!pico.empty(),"Pico SNES bridge lost its built-in mapping");
+        for(const char* field:{"a:","b:","x:","y:","back:","start:",
+                "leftshoulder:","rightshoulder:","dpup:","dpdown:",
+                "dpleft:","dpright:"}) {
+            require(pico.find(field)!=std::string_view::npos,
+                "Pico SNES bridge mapping lacks a SNES control");
+        }
+        require(pico.find("guid")==std::string_view::npos
+            && pico.find("platform:")==std::string_view::npos,
+            "built-in mapping fields must not carry GUID or platform");
+        require(known_joystick_mapping(0x045e,0x028e).empty()
+            && known_joystick_mapping(0,0).empty(),
+            "SDL-database or unknown pads must not get a built-in mapping");
+    }
     for(unsigned scale:{1U,2U,4U,10U}) {
         using namespace starfox::render;
         const auto w=256U*scale,h=224U*scale;

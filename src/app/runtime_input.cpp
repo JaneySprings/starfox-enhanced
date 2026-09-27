@@ -168,6 +168,36 @@ bool native_deck_device(SDL_JoystickID identifier) {
         || (name && contains(name,"steam deck"));
 }
 
+// Generic HID gamepads absent from SDL's controller database. Button and axis
+// indices follow SDL's HID enumeration order (buttons and axes sorted by
+// usage on the desktop backends), so one entry serves macOS, Windows and Linux.
+struct KnownJoystick {
+    std::uint16_t vendor;
+    std::uint16_t product;
+    std::string_view name;
+    std::string_view mapping;
+};
+
+constexpr std::array kKnownJoysticks{
+    // Raspberry Pi Pico (arduino-pico Joystick HID) bridging an SNES Classic
+    // Mini controller: buttons 1-8 are B, A, Y, X, L, R, Select, Start; the
+    // D-pad drives the hat and the X/Y axes.
+    KnownJoystick{0x2e8aU, 0xf00eU, "SNES Classic (Pico)",
+        "a:b0,b:b1,x:b2,y:b3,leftshoulder:b4,rightshoulder:b5,"
+        "back:b6,start:b7,dpup:h0.1,dpright:h0.2,dpdown:h0.4,dpleft:h0.8,"
+        "leftx:a0,lefty:a1"},
+};
+
+void load_gamepad_mapping_file(const std::filesystem::path& directory) {
+    if (directory.empty()) return;
+    const auto file = directory / "gamecontrollerdb.txt";
+    std::error_code error;
+    if (!std::filesystem::is_regular_file(file, error)) return;
+    if (SDL_AddGamepadMappingsFromFile(file.string().c_str()) < 0) {
+        SDL_Log("%s: %s", file.string().c_str(), SDL_GetError());
+    }
+}
+
 std::filesystem::path legacy_bindings_path() {
     char* preference_path = SDL_GetPrefPath("StarFoxEnhanced", "StarFoxEnhanced");
     if (preference_path == nullptr) return {};
@@ -388,6 +418,62 @@ void configure_native_gamepad_support() noexcept {
     static_cast<void>(SDL_SetHintWithPriority(
         SDL_HINT_JOYSTICK_RAWINPUT_CORRELATE_XINPUT,
         "1", SDL_HINT_DEFAULT));
+}
+
+std::string_view known_joystick_mapping(
+    std::uint16_t vendor, std::uint16_t product) noexcept {
+    for (const auto& known : kKnownJoysticks) {
+        if (known.vendor == vendor && known.product == product) {
+            return known.mapping;
+        }
+    }
+    return {};
+}
+
+bool register_known_joystick_mapping(SDL_JoystickID identifier) noexcept {
+    if (SDL_IsGamepad(identifier)) return false;
+    const auto vendor = SDL_GetJoystickVendorForID(identifier);
+    const auto product = SDL_GetJoystickProductForID(identifier);
+    for (const auto& known : kKnownJoysticks) {
+        if (known.vendor != vendor || known.product != product) continue;
+        // The device's own GUID keeps this exact across backends; SDL moves
+        // its name CRC into a crc: field when it stores the mapping.
+        char guid[33]{};
+        SDL_GUIDToString(SDL_GetJoystickGUIDForID(identifier), guid, sizeof(guid));
+        std::string line{guid};
+        line += ',';
+        line += known.name;
+        line += ',';
+        line += known.mapping;
+        line += ',';
+        if (SDL_AddGamepadMapping(line.c_str()) < 0) {
+            SDL_Log("gamepad mapping for %s: %s", guid, SDL_GetError());
+            return false;
+        }
+        return true;
+    }
+    return false;
+}
+
+void register_gamepad_mappings() noexcept {
+    try {
+        load_gamepad_mapping_file(desktop_data_directory());
+#if defined(__APPLE__) && !defined(SDL_PLATFORM_IOS)
+        // Settings live in Application Support; the bundle stays the natural
+        // place for a user to drop a database beside the executable.
+        if (legacy_bundle_directory != desktop_data_directory()) {
+            load_gamepad_mapping_file(legacy_bundle_directory);
+        }
+#endif
+    } catch (const std::exception& error) {
+        SDL_Log("gamecontrollerdb.txt: %s", error.what());
+    }
+    int count = 0;
+    SDL_JoystickID* identifiers = SDL_GetJoysticks(&count);
+    for (int index = 0; identifiers != nullptr && index < count; ++index) {
+        static_cast<void>(register_known_joystick_mapping(identifiers[index]));
+    }
+    SDL_free(identifiers);
 }
 
 SDL_Gamepad* open_preferred_gamepad() noexcept {
