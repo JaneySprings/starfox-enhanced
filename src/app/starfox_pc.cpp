@@ -1082,6 +1082,12 @@ find_required_retail(const std::filesystem::path& executable_directory) {
     };
     auto directories = std::vector<std::filesystem::path>{
         executable_directory};
+#if defined(__APPLE__) && !defined(SDL_PLATFORM_IOS)
+    // A macOS bundle keeps the executable in App.app/Contents/MacOS. Also
+    // accept a ROM beside the .app bundle itself, as with the MSU-1 pack.
+    directories.push_back(
+        executable_directory.parent_path().parent_path().parent_path());
+#endif
 #if defined(_WIN32) && !defined(STARFOX_UWP)
     directories.insert(directories.begin(), std::filesystem::path{
         R"(C:\NTSC-US Super Nintendo System Roms)"});
