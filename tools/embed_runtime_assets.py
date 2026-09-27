@@ -7,6 +7,13 @@ import argparse
 from pathlib import Path
 
 
+def write_source(path, text):
+    # Path.write_text(newline=...) needs Python 3.10; Xcode ships 3.9.
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open('w', encoding='utf-8', newline='\n') as handle:
+        handle.write(text)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True, type=Path)
@@ -55,7 +62,7 @@ def main() -> int:
             '} // namespace starfox::assets',
             '',
         ])
-        args.output.write_text('\n'.join(dispatch), encoding='utf-8', newline='\n')
+        write_source(args.output, '\n'.join(dispatch))
 
         for identifier, payload in resources:
             lines = [
@@ -90,8 +97,8 @@ def main() -> int:
                 '} // namespace starfox::assets',
                 '',
             ])
-            (args.split_dir / f'embedded_resource_{identifier}.cpp').write_text(
-                '\n'.join(lines), encoding='utf-8', newline='\n')
+            write_source(args.split_dir / f'embedded_resource_{identifier}.cpp',
+                '\n'.join(lines))
         return 0
 
     lines = [
@@ -148,8 +155,7 @@ def main() -> int:
         "} // namespace starfox::assets",
         "",
     ])
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text("\n".join(lines), encoding="utf-8", newline="\n")
+    write_source(args.output, "\n".join(lines))
     return 0
 
 
